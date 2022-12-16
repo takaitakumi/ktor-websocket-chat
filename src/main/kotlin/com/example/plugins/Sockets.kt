@@ -1,5 +1,6 @@
 package com.example.plugins
 
+import com.example.Connection
 import io.ktor.server.routing.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
@@ -8,6 +9,7 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
+import java.util.Collections
 
 fun Application.configureSockets() {
     install(WebSockets) {
@@ -18,12 +20,24 @@ fun Application.configureSockets() {
     }
 
     routing {
+        val connections = Collections.synchronizedSet<Connection?>(LinkedHashSet())
         webSocket("/chat") {
-            send("You are connected!")
-            for (frame in incoming) {
-                frame as? Frame.Text ?: continue // 跳过非文本数据和空数据
-                val receivedText = frame.readText()
-                send("You said : $receivedText")
+            println("Adding user!")
+            val thisConnection = Connection(this)
+            connections += thisConnection
+            try {
+                send("You are connected! There are ${connections.count()} users here.") // 谁发送的请求 直接send给谁 这里send都不用指定连接(ip port)
+                for (frame in incoming) {
+                    frame as? Frame.Text ?: continue
+                    val receivedText = frame.readText()
+                    val textWithUsername = "[${thisConnection.name}]: $receivedText"
+                    connections.forEach {it.session.send(textWithUsername)}
+                }
+            } catch (e: Exception) {
+                println(e.localizedMessage)
+            } finally {
+                println("removing $thisConnection!")
+                connections -= thisConnection
             }
         }
 
